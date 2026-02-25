@@ -235,8 +235,66 @@ const getTermOfTheDay = async () => {
     };
 };
 
+/**
+ * Reverse search: find terms by searching in descriptions.
+ * Uses both exact phrase matching (ILIKE) and full-text search.
+ * Returns the matching terms ranked by relevance.
+ */
+const searchByDescription = async (description, page = 1, limit = 10) => {
+    const offset = (page - 1) * limit;
+
+    // Use ILIKE for exact phrase matching + FTS for keyword matching
+    const tsQuery = description
+        .trim()
+        .split(/\s+/)
+        .map((word) => `${word}:*`)
+        .join(' & ');
+
+    const dataResult = await db.query(
+        `SELECT 
+            t.id,
+            t.term,
+            t.description,
+            t.etymology,
+            t.pronunciation,
+            t.created_at,
+            CASE 
+                WHEN LOWER(t.description) LIKE LOWER($1) THEN 1.0
+                WHEN LOWER(t.description) LIKE LOWER($2) THEN 0.8
+                ELSE ts_rank(t.search_vector, to_tsquery('english', $3)) * 0.5
+            END AS relevance
+        FROM terms_law_table t
+        WHERE 
+            LOWER(t.description) LIKE LOWER($2)
+            OR t.search_vector @@ to_tsquery('english', $3)
+        ORDER BY relevance DESC, t.term ASC
+        LIMIT $4 OFFSET $5`,
+        [`%${description.trim()}%`, `%${description.trim()}%`, tsQuery, limit, offset]
+    );
+
+    const countResult = await db.query(
+        `SELECT COUNT(*) AS total
+        FROM terms_law_table t
+        WHERE 
+            LOWER(t.description) LIKE LOWER($1)
+            OR t.search_vector @@ to_tsquery('english', $2)`,
+        [`%${description.trim()}%`, tsQuery]
+    );
+
+    return {
+        terms: dataResult.rows,
+        pagination: {
+            page,
+            limit,
+            total: parseInt(countResult.rows[0].total, 10),
+            totalPages: Math.ceil(parseInt(countResult.rows[0].total, 10) / limit),
+        },
+    };
+};
+
 module.exports = {
     searchTerms,
     getTermById,
     getTermOfTheDay,
+    searchByDescription,
 };

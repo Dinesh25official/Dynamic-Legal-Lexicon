@@ -10,6 +10,13 @@ const lexiconController = require('./lexicon.controller');
 router.get('/search', lexiconController.search);
 
 /**
+ * @route   GET /api/lexicon/search-by-description
+ * @desc    Reverse search: find the exact term by searching within descriptions
+ * @query   desc (description text), page, limit
+ */
+router.get('/search-by-description', lexiconController.searchByDescription);
+
+/**
  * @route   GET /api/lexicon/term-of-the-day
  * @desc    Get today's featured legal term
  * @note    Must be BEFORE /term/:id to avoid route conflicts

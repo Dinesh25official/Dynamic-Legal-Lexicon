@@ -99,8 +99,46 @@ const getTermOfTheDay = async (req, res) => {
     }
 };
 
+/**
+ * GET /api/lexicon/search-by-description
+ * Query params: desc (description text), page, limit
+ * Finds terms whose description matches the input text.
+ */
+const searchByDescription = async (req, res) => {
+    try {
+        const { desc, page = 1, limit = 10 } = req.query;
+
+        if (!desc || desc.trim() === '') {
+            return res.status(400).json({
+                success: false,
+                message: 'Please provide a description to search. Use ?desc=your+text',
+            });
+        }
+
+        const parsedPage = Math.max(1, parseInt(page, 10) || 1);
+        const parsedLimit = Math.min(50, Math.max(1, parseInt(limit, 10) || 10));
+
+        const results = await lexiconModel.searchByDescription(desc, parsedPage, parsedLimit);
+
+        return res.status(200).json({
+            success: true,
+            message: `Found ${results.pagination.total} term(s) matching your description`,
+            searchedDescription: desc,
+            data: results,
+        });
+    } catch (error) {
+        console.error('Description search error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'An error occurred while searching by description',
+            error: error.message,
+        });
+    }
+};
+
 module.exports = {
     search,
     getTermById,
     getTermOfTheDay,
+    searchByDescription,
 };
