@@ -3,18 +3,20 @@ const router = express.Router();
 const lexiconController = require('./lexicon.controller');
 
 /**
- * @route   GET /api/lexicon/search
- * @desc    Search legal terms by keyword with optional context filter
- * @query   q, context, page, limit
+ * @route   GET /api/lexicon/search/term
+ * @desc    SEARCH ENGINE 1: Enter a term name → get its description
+ * @query   q (term name), page, limit
+ * @example /api/lexicon/search/term?q=action
  */
-router.get('/search', lexiconController.search);
+router.get('/search/term', lexiconController.searchByTerm);
 
 /**
- * @route   GET /api/lexicon/search-by-description
- * @desc    Reverse search: find the exact term by searching within descriptions
- * @query   desc (description text), page, limit
+ * @route   GET /api/lexicon/search/description
+ * @desc    SEARCH ENGINE 2: Enter description keywords → get the matching term
+ * @query   q (description text), page, limit
+ * @example /api/lexicon/search/description?q=proceedings+instituted+in+court
  */
-router.get('/search-by-description', lexiconController.searchByDescription);
+router.get('/search/description', lexiconController.searchByDescription);
 
 /**
  * @route   GET /api/lexicon/term-of-the-day

@@ -1,116 +1,128 @@
 const db = require('../../config/db');
 
 /**
- * Search legal terms using PostgreSQL full-text search.
- * Supports term search, description search, and optional context filtering.
+ * SEARCH ENGINE 1: Search by Term Name
+ * When user enters a term, returns ALL matching terms and their descriptions.
+ * Exact matches rank highest, then partial matches (e.g., "action" finds
+ * "action", "actionable", "cause of action", etc.)
  */
-const searchTerms = async (query, contextFilter, page = 1, limit = 10) => {
+const searchByTerm = async (query, page = 1, limit = 10) => {
     const offset = (page - 1) * limit;
 
-    let baseQuery = '';
-    let countQuery = '';
-    const params = [];
-    let paramIndex = 1;
+    const dataResult = await db.query(
+        `SELECT 
+            t.id,
+            t.term,
+            t.description,
+            t.etymology,
+            t.pronunciation,
+            t.created_at,
+            CASE 
+                WHEN LOWER(t.term) = LOWER($1) THEN 1.0
+                ELSE 0.5
+            END AS relevance
+        FROM terms_law_table t
+        WHERE LOWER(t.term) LIKE LOWER($2)
+        ORDER BY relevance DESC, t.term ASC
+        LIMIT $3 OFFSET $4`,
+        [query.trim(), `%${query.trim()}%`, limit, offset]
+    );
 
-    if (query && query.trim() !== '') {
-        // Convert user query to tsquery format (add :* for prefix matching)
-        const tsQuery = query
-            .trim()
-            .split(/\s+/)
-            .map((word) => `${word}:*`)
-            .join(' & ');
-
-        params.push(tsQuery);
-
-        baseQuery = `
-      SELECT 
-        t.id,
-        t.term,
-        t.description,
-        t.etymology,
-        t.pronunciation,
-        ts_rank(t.search_vector, to_tsquery('english', $${paramIndex})) AS relevance,
-        t.created_at
-      FROM terms_law_table t
-    `;
-
-        countQuery = `
-      SELECT COUNT(*) AS total
-      FROM terms_law_table t
-    `;
-
-        if (contextFilter) {
-            baseQuery += `
-        INNER JOIN term_contexts tc ON t.id = tc.term_id
-        INNER JOIN contexts c ON tc.context_id = c.id
-      `;
-            countQuery += `
-        INNER JOIN term_contexts tc ON t.id = tc.term_id
-        INNER JOIN contexts c ON tc.context_id = c.id
-      `;
-        }
-
-        baseQuery += ` WHERE t.search_vector @@ to_tsquery('english', $${paramIndex})`;
-        countQuery += ` WHERE t.search_vector @@ to_tsquery('english', $${paramIndex})`;
-        paramIndex++;
-
-        if (contextFilter) {
-            params.push(contextFilter);
-            baseQuery += ` AND LOWER(c.name) = LOWER($${paramIndex})`;
-            countQuery += ` AND LOWER(c.name) = LOWER($${paramIndex})`;
-            paramIndex++;
-        }
-
-        baseQuery += ` ORDER BY relevance DESC`;
-    } else {
-        baseQuery = `
-      SELECT 
-        t.id,
-        t.term,
-        t.description,
-        t.etymology,
-        t.pronunciation,
-        0 AS relevance,
-        t.created_at
-      FROM terms_law_table t
-    `;
-
-        countQuery = `
-      SELECT COUNT(*) AS total
-      FROM terms_law_table t
-    `;
-
-        if (contextFilter) {
-            baseQuery += `
-        INNER JOIN term_contexts tc ON t.id = tc.term_id
-        INNER JOIN contexts c ON tc.context_id = c.id
-        WHERE LOWER(c.name) = LOWER($${paramIndex})
-      `;
-            countQuery += `
-        INNER JOIN term_contexts tc ON t.id = tc.term_id
-        INNER JOIN contexts c ON tc.context_id = c.id
-        WHERE LOWER(c.name) = LOWER($${paramIndex})
-      `;
-            params.push(contextFilter);
-            paramIndex++;
-        }
-
-        baseQuery += ` ORDER BY t.term ASC`;
-    }
-
-    params.push(limit);
-    baseQuery += ` LIMIT $${paramIndex}`;
-    paramIndex++;
-
-    params.push(offset);
-    baseQuery += ` OFFSET $${paramIndex}`;
-
-    const [dataResult, countResult] = await Promise.all([
-        db.query(baseQuery, params),
-        db.query(countQuery, params.slice(0, params.length - 2)),
-    ]);
+    const countResult = await db.query(
+        `SELECT COUNT(*) AS total
+        FROM terms_law_table t
+        WHERE LOWER(t.term) LIKE LOWER($1)`,
+        [`%${query.trim()}%`]
+    );
 
     return {
+        searchType: 'term',
+        terms: dataResult.rows,
+        pagination: {
+            page,
+            limit,
+            total: parseInt(countResult.rows[0].total, 10),
+            totalPages: Math.ceil(parseInt(countResult.rows[0].total, 10) / limit),
+        },
+    };
+};
+
+/**
+ * SEARCH ENGINE 2: Search by Description
+ * When user enters a description (or keywords from it), returns the matching term(s).
+ * Uses ILIKE for phrase matching + full-text search for keyword matching.
+ */
+const searchByDescription = async (query, page = 1, limit = 10) => {
+    const offset = (page - 1) * limit;
+
+    const tsQuery = query
+        .trim()
+        .split(/\s+/)
+        .filter((w) => w.length > 2) // skip very short words
+        .map((word) => `${word}:*`)
+        .join(' & ');
+
+    // If tsQuery is empty (all words were too short), use ILIKE only
+    const hasTsQuery = tsQuery.length > 0;
+
+    let dataQuery, countQuery, params;
+
+    if (hasTsQuery) {
+        dataQuery = `SELECT 
+                t.id,
+                t.term,
+                t.description,
+                t.etymology,
+                t.pronunciation,
+                t.created_at,
+                CASE 
+                    WHEN LOWER(t.description) LIKE LOWER($1) THEN 1.0
+                    ELSE ts_rank(t.search_vector, to_tsquery('english', $2)) * 0.5
+                END AS relevance
+            FROM terms_law_table t
+            WHERE 
+                LOWER(t.description) LIKE LOWER($1)
+                OR t.search_vector @@ to_tsquery('english', $2)
+            ORDER BY relevance DESC, t.term ASC
+            LIMIT $3 OFFSET $4`;
+
+        countQuery = `SELECT COUNT(*) AS total
+            FROM terms_law_table t
+            WHERE 
+                LOWER(t.description) LIKE LOWER($1)
+                OR t.search_vector @@ to_tsquery('english', $2)`;
+
+        params = [`%${query.trim()}%`, tsQuery, limit, offset];
+    } else {
+        dataQuery = `SELECT 
+                t.id,
+                t.term,
+                t.description,
+                t.etymology,
+                t.pronunciation,
+                t.created_at,
+                1.0 AS relevance
+            FROM terms_law_table t
+            WHERE LOWER(t.description) LIKE LOWER($1)
+            ORDER BY t.term ASC
+            LIMIT $2 OFFSET $3`;
+
+        countQuery = `SELECT COUNT(*) AS total
+            FROM terms_law_table t
+            WHERE LOWER(t.description) LIKE LOWER($1)`;
+
+        params = [`%${query.trim()}%`, limit, offset];
+    }
+
+    const dataResult = await db.query(dataQuery, params);
+
+    const countParams = hasTsQuery
+        ? [`%${query.trim()}%`, tsQuery]
+        : [`%${query.trim()}%`];
+    const countResult = await db.query(countQuery, countParams);
+
+    return {
+        searchType: 'description',
         terms: dataResult.rows,
         pagination: {
             page,
@@ -235,66 +247,9 @@ const getTermOfTheDay = async () => {
     };
 };
 
-/**
- * Reverse search: find terms by searching in descriptions.
- * Uses both exact phrase matching (ILIKE) and full-text search.
- * Returns the matching terms ranked by relevance.
- */
-const searchByDescription = async (description, page = 1, limit = 10) => {
-    const offset = (page - 1) * limit;
-
-    // Use ILIKE for exact phrase matching + FTS for keyword matching
-    const tsQuery = description
-        .trim()
-        .split(/\s+/)
-        .map((word) => `${word}:*`)
-        .join(' & ');
-
-    const dataResult = await db.query(
-        `SELECT 
-            t.id,
-            t.term,
-            t.description,
-            t.etymology,
-            t.pronunciation,
-            t.created_at,
-            CASE 
-                WHEN LOWER(t.description) LIKE LOWER($1) THEN 1.0
-                WHEN LOWER(t.description) LIKE LOWER($2) THEN 0.8
-                ELSE ts_rank(t.search_vector, to_tsquery('english', $3)) * 0.5
-            END AS relevance
-        FROM terms_law_table t
-        WHERE 
-            LOWER(t.description) LIKE LOWER($2)
-            OR t.search_vector @@ to_tsquery('english', $3)
-        ORDER BY relevance DESC, t.term ASC
-        LIMIT $4 OFFSET $5`,
-        [`%${description.trim()}%`, `%${description.trim()}%`, tsQuery, limit, offset]
-    );
-
-    const countResult = await db.query(
-        `SELECT COUNT(*) AS total
-        FROM terms_law_table t
-        WHERE 
-            LOWER(t.description) LIKE LOWER($1)
-            OR t.search_vector @@ to_tsquery('english', $2)`,
-        [`%${description.trim()}%`, tsQuery]
-    );
-
-    return {
-        terms: dataResult.rows,
-        pagination: {
-            page,
-            limit,
-            total: parseInt(countResult.rows[0].total, 10),
-            totalPages: Math.ceil(parseInt(countResult.rows[0].total, 10) / limit),
-        },
-    };
-};
-
 module.exports = {
-    searchTerms,
+    searchByTerm,
+    searchByDescription,
     getTermById,
     getTermOfTheDay,
-    searchByDescription,
 };
