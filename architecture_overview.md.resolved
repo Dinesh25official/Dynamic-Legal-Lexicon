@@ -1,0 +1,62 @@
+# Project Architecture Overview
+
+The **Dynamic Legal Lexicon** is built using a modern decoupled architecture with a focus on modularity and high-performance data retrieval.
+
+## High-Level Architecture
+
+```mermaid
+graph TD
+    User((User))
+    Admin((Admin))
+
+    subgraph "Frontend (React + Vite)"
+        UI[User Interface Components]
+        Pages[Page Views]
+        Services[API Service Layer]
+    end
+
+    subgraph "Backend (Node.js + Express)"
+        Routes[Express Routes]
+        Middleware[Auth & Logging Middleware]
+        Models[Data Models]
+        Schedulers[Background Schedulers]
+    end
+
+    subgraph "External & Database"
+        DB[(PostgreSQL)]
+        AI[AI Engine - Groq/Gemini]
+    end
+
+    User --> UI
+    Admin --> UI
+    UI --> Pages
+    Pages --> Services
+    Services --> Routes
+    Routes --> Middleware
+    Middleware --> Models
+    Models --> DB
+    Schedulers --> Models
+    UI -- "Direct AI Chat" --> AI
+```
+
+## 1. Frontend Layer (Modern React)
+- **Framework**: [React](https://react.dev/) using [Vite](https://vitejs.dev/) for ultra-fast development and optimized production builds.
+- **State Management**: Distributed state using React Hooks (`useState`, `useEffect`, `useContext`).
+- **Layout & Styling**: Advanced **Vanilla CSS** utilizing CSS Variables for consistent, project-wide design tokens (colors, spacing, typography).
+- **Architecture**: Specialized Service-Component separation. Components consume API services from a centralized [services/api.js](file:///c:/Users/Harini%20S/Downloads/dynamic-legal-lexicon%20ui/dynamic-legal-lexicon-2/frontend/src/services/api.js) layer.
+
+## 2. Backend Layer (Node.js + Express)
+- **Modularity**: The backend follows a **Module-First** approach (e.g., `modules/lexicon`, `modules/auth`). Each module contains its own routes, models, and logic.
+- **Data Access**: **Model Layer** abstracts raw SQL queries from the business logic.
+- **Background Processes**: Uses `node-cron` for automated tasks like the **Daily Term Rotation**, ensuring data stays fresh without manual intervention.
+- **Security**: Stateless authentication using **JWT (JSON Web Tokens)** and **Bcrypt** for password hashing.
+
+## 3. Data Layer (PostgreSQL)
+- **Relational Integrity**: Leverages PostgreSQL for complex legal data relationships.
+- **Optimized Searching**: Implements custom SQL logic for term relevance and full-text search capabilities.
+- **Internal Optimization**: Uses PostgreSQL's internal `ctid` pointers for efficient management of large datasets that lack traditional primary keys (like statutory references).
+
+## 4. AI & Integration
+- **LLM Connectivity**: Integrates with Groq/Llama-3/Gemini engines to provide:
+    - **SmartTradeAI**: Intelligent legal tutoring and chat.
+    - **Dynamic Quiz Generation**: Real-time MCQ creation based on legal definitions.

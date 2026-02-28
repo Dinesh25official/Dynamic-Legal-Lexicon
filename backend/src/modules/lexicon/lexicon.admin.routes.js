@@ -3,7 +3,16 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const router = express.Router();
-const csvImporter = require('./csvImporter');
+const csvImporter = require('./services/csvImporter');
+const lexiconModel = require('./models/lexicon.model');
+const statutoryModel = require('./models/statutory.model');
+const dailyTermModel = require('./models/dailyTerm.model');
+const { authorize } = require('../../middleware/auth');
+
+// ========================
+// All admin routes require admin role
+// ========================
+router.use(authorize(['admin']));
 
 // ========================
 // Multer Configuration
@@ -26,7 +35,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
     storage,
-    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
+    limits: { fileSize: 50 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
         const allowedTypes = [
             'text/csv',
@@ -47,11 +56,90 @@ const upload = multer({
 // ========================
 
 /**
- * @route   POST /api/lexicon/admin/import-csv
- * @desc    Upload a CSV file with legal terms and import into database
- * @body    file (file) — CSV with "term" and "definition" columns
+ * GET /api/admin/lexicon
+ * List all terms (paginated) for admin table
  */
-router.post('/import-csv', (req, res, next) => {
+router.get('/lexicon', async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const result = await lexiconModel.getAllTerms(page, limit);
+
+        // Map for frontend
+        result.terms = result.terms.map(t => ({
+            id: t["Legal Term"], // Alias for frontend compatibility
+            term: t["Legal Term"],
+            oxford_definition: t["Fixed (Oxford) Definition"],
+            simplified_definition: t["Simplified Definition"]
+        }));
+
+        res.json({ success: true, ...result });
+    } catch (error) {
+        console.error('Admin list terms error:', error);
+        res.status(500).json({ success: false, message: 'Failed to list terms' });
+    }
+});
+
+/**
+ * PUT /api/admin/lexicon/:id
+ * Update a term (id is the term name)
+ */
+router.put('/lexicon/:id', async (req, res) => {
+    try {
+        const { term, oxford_definition, simplified_definition } = req.body;
+
+        if (!term && !oxford_definition && !simplified_definition) {
+            return res.status(400).json({ success: false, message: 'At least one field is required' });
+        }
+
+        const updatedRaw = await lexiconModel.updateTerm(req.params.id, {
+            term,
+            fixed_definition: oxford_definition,
+            simplified_definition,
+        });
+
+        if (!updatedRaw) {
+            return res.status(404).json({ success: false, message: 'Term not found' });
+        }
+
+        const updated = {
+            id: updatedRaw["Legal Term"],
+            term: updatedRaw["Legal Term"],
+            oxford_definition: updatedRaw["Fixed (Oxford) Definition"],
+            simplified_definition: updatedRaw["Simplified Definition"]
+        };
+
+        res.json({ success: true, message: 'Term updated', term: updated });
+    } catch (error) {
+        console.error('Admin update term error:', error);
+        res.status(500).json({ success: false, message: 'Failed to update term' });
+    }
+});
+
+/**
+ * DELETE /api/admin/lexicon/:id
+ * Delete a term (id is the term name)
+ */
+router.delete('/lexicon/:id', async (req, res) => {
+    try {
+        const deletedRaw = await lexiconModel.deleteTerm(req.params.id);
+
+        if (!deletedRaw) {
+            return res.status(404).json({ success: false, message: 'Term not found' });
+        }
+
+        res.json({ success: true, message: `Term "${deletedRaw["Legal Term"]}" deleted` });
+    } catch (error) {
+        console.error('Admin delete term error:', error);
+        res.status(500).json({ success: false, message: 'Failed to delete term' });
+    }
+});
+
+/**
+ * POST /api/admin/lexicon/import-csv
+ * Upload CSV and import terms
+ */
+router.post('/lexicon/import-csv', (req, res, next) => {
     upload.single('file')(req, res, (err) => {
         if (err) {
             return res.status(400).json({
@@ -67,85 +155,195 @@ router.post('/import-csv', (req, res, next) => {
         if (!req.file) {
             return res.status(400).json({
                 success: false,
-                message: 'No CSV file uploaded. Please upload a file with field name "file".',
-                hint: 'CSV must have "term" and "definition" columns.',
+                message: 'No CSV file uploaded.',
             });
         }
 
         console.log(`\n${'='.repeat(50)}`);
         console.log(`📥 CSV Upload received: ${req.file.originalname}`);
-        console.log(`   Size: ${(req.file.size / 1024).toFixed(2)} KB`);
         console.log(`${'='.repeat(50)}\n`);
 
-        // Run the CSV import pipeline
         const result = await csvImporter.importCSV(req.file.path);
 
-        // Clean up uploaded file after processing
         fs.unlink(req.file.path, (err) => {
-            if (err) console.error('Failed to clean up uploaded file:', err);
+            if (err) console.error('Failed to clean up:', err);
         });
 
-        const statusCode = result.success ? 200 : 422;
-        return res.status(statusCode).json({
+        res.status(result.success ? 200 : 422).json({
             success: result.success,
             message: result.message,
             data: {
-                file: {
-                    name: req.file.originalname,
-                    size: `${(req.file.size / 1024).toFixed(2)} KB`,
-                },
+                file: { name: req.file.originalname },
                 totalParsed: result.totalParsed || 0,
                 result: result.result || null,
-                sampleTerms: result.sampleTerms || null,
             },
         });
     } catch (error) {
         console.error('CSV import error:', error);
-
-        if (req.file) {
-            fs.unlink(req.file.path, () => { });
-        }
-
-        return res.status(500).json({
-            success: false,
-            message: 'An error occurred while importing the CSV',
-            error: error.message,
-        });
+        if (req.file) fs.unlink(req.file.path, () => { });
+        res.status(500).json({ success: false, message: 'CSV import failed' });
     }
 });
 
 /**
- * @route   POST /api/lexicon/admin/import-text
- * @desc    Directly import a single term (useful for manual additions)
- * @body    { term: "...", definition: "..." }
+ * POST /api/admin/lexicon/import-text
+ * Add a single term manually
  */
-router.post('/import-text', async (req, res) => {
+router.post('/lexicon/import-text', async (req, res) => {
     try {
-        const { term, definition } = req.body;
+        const { term, oxford_definition, simplified_definition } = req.body;
 
-        if (!term || !definition) {
-            return res.status(400).json({
-                success: false,
-                message: 'Both "term" and "definition" are required.',
-            });
+        if (!term || !oxford_definition || !simplified_definition) {
+            return res.status(400).json({ success: false, message: '"term", "oxford_definition", and "simplified_definition" are required.' });
         }
 
         const result = await csvImporter.importTermsToDatabase([
-            { term: term.trim(), description: definition.trim() },
+            { term: term.trim(), oxford_definition: oxford_definition.trim(), simplified_definition: simplified_definition.trim() },
         ]);
 
-        return res.status(200).json({
-            success: true,
-            message: `Term "${term}" processed`,
-            data: result,
-        });
+        res.json({ success: true, message: `Term "${term}" added`, data: result });
     } catch (error) {
         console.error('Import error:', error);
-        return res.status(500).json({
-            success: false,
-            message: 'An error occurred while importing the term',
-            error: error.message,
-        });
+        res.status(500).json({ success: false, message: 'Failed to add term' });
+    }
+});
+
+/**
+ * GET /api/admin/statutory
+ * List all statutory references (paginated)
+ */
+router.get('/statutory', async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const result = await statutoryModel.getStatutoryList(page, limit);
+        res.json({ success: true, ...result });
+    } catch (error) {
+        console.error('Admin list statutes error:', error);
+        res.status(500).json({ success: false, message: 'Failed to list statutes' });
+    }
+});
+
+/**
+ * PUT /api/admin/statutory/:ctid
+ * Update a statutory reference
+ */
+router.put('/statutory/:ctid', async (req, res) => {
+    try {
+        const result = await statutoryModel.updateStatutory(req.params.ctid, req.body);
+        if (!result) return res.status(404).json({ success: false, message: 'Statutory reference not found' });
+        res.json({ success: true, message: 'Statutory reference updated', data: result });
+    } catch (error) {
+        console.error('Admin update statute error:', error);
+        res.status(500).json({ success: false, message: 'Failed to update statute' });
+    }
+});
+
+/**
+ * DELETE /api/admin/statutory/:ctid
+ * Delete a statutory reference
+ */
+router.delete('/statutory/:ctid', async (req, res) => {
+    try {
+        const result = await statutoryModel.deleteStatutory(req.params.ctid);
+        if (!result) return res.status(404).json({ success: false, message: 'Statutory reference not found' });
+        res.json({ success: true, message: 'Statutory reference deleted' });
+    } catch (error) {
+        console.error('Admin delete statute error:', error);
+        res.status(500).json({ success: false, message: 'Failed to delete statute' });
+    }
+});
+
+/**
+ * GET /api/admin/daily-pool
+ * List all terms in the daily pool
+ */
+router.get('/daily-pool', async (req, res) => {
+    try {
+        const result = await dailyTermModel.getAllDailyTerms();
+        res.json({ success: true, pool: result });
+    } catch (error) {
+        console.error('Admin list pool error:', error);
+        res.status(500).json({ success: false, message: 'Failed to list daily pool' });
+    }
+});
+
+/**
+ * POST /api/admin/daily-pool
+ * Add term to daily pool
+ */
+router.post('/daily-pool', async (req, res) => {
+    try {
+        const { term, oxford_definition, simplified_definition } = req.body;
+        const result = await dailyTermModel.addToDailyPool(term, oxford_definition, simplified_definition);
+        res.json({ success: true, message: `"${term}" added to pool`, data: result });
+    } catch (error) {
+        console.error('Admin add pool error:', error);
+        res.status(500).json({ success: false, message: 'Failed to add to pool' });
+    }
+});
+
+/**
+ * DELETE /api/admin/daily-pool/:term
+ * Remove term from daily pool
+ */
+router.delete('/daily-pool/:term', async (req, res) => {
+    try {
+        const result = await dailyTermModel.removeFromDailyPool(req.params.term);
+        res.json({ success: true, message: `Term removed from pool` });
+    } catch (error) {
+        console.error('Admin delete pool error:', error);
+        res.status(500).json({ success: false, message: 'Failed to remove from pool' });
+    }
+});
+
+/**
+ * POST /api/admin/daily-pool/set-active/:term
+ * Manually set a term as active
+ */
+router.post('/daily-pool/set-active/:term', async (req, res) => {
+    try {
+        const result = await dailyTermModel.setActiveTerm(req.params.term);
+        res.json({ success: true, message: `"${req.params.term}" is now active`, data: result });
+    } catch (error) {
+        console.error('Admin set active error:', error);
+        res.status(500).json({ success: false, message: 'Failed to set active term' });
+    }
+});
+
+/**
+ * POST /api/admin/lexicon/daily-term
+ * Set the legal term of the day (Legacy)
+ */
+router.post('/daily-term', async (req, res) => {
+    try {
+        const { term } = req.body;
+        if (!term) return res.status(400).json({ success: false, message: 'Term is required' });
+
+        const result = await dailyTermModel.setActiveTerm(term);
+        res.json({ success: true, message: `"${term}" set as Term of the Day`, data: result });
+    } catch (error) {
+        console.error('Set daily term error:', error);
+        res.status(500).json({ success: false, message: 'Failed to set daily term' });
+    }
+});
+
+/**
+ * POST /api/admin/lexicon/statutory
+ * Add a statutory reference to a term
+ */
+router.post('/statutory', async (req, res) => {
+    try {
+        const { term, statute_name, section, description, url } = req.body;
+        if (!term || !statute_name) {
+            return res.status(400).json({ success: false, message: 'Term and Statute Name are required' });
+        }
+
+        const result = await statutoryModel.addStatutory({ term, statute_name, section, description, url });
+        res.json({ success: true, message: 'Statutory reference added', data: result });
+    } catch (error) {
+        console.error('Add statutory error:', error);
+        res.status(500).json({ success: false, message: 'Failed to add statutory reference' });
     }
 });
 

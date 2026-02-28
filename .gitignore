@@ -1,3 +1,29 @@
+# Dependencies
 node_modules/
+frontend/node_modules/
+backend/node_modules/
+AI Integration/node_modules/
+Quiz Generation/node_modules/
+server/node_modules/
+
+# Sensitive data
 .env
+frontend/.env
+backend/.env
+AI Integration/.env
+server/.env
+
+# Build outputs
+dist/
+build/
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+*.log
+npm-debug.log*
+
+# Other
 uploads/
+/tmp/

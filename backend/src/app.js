@@ -2,8 +2,9 @@ const express = require('express');
 const cors = require('cors');
 
 // Import routes
-const lexiconRoutes = require('./modules/lexicon/lexicon.routes');
-const lexiconAdminRoutes = require('./modules/lexicon/lexicon.admin.routes');
+// Import modular monolith modules
+const lexiconModule = require('./modules/lexicon');
+const authModule = require('./modules/auth');
 
 const app = express();
 
@@ -28,8 +29,9 @@ app.get('/api/health', (req, res) => {
 // ========================
 // API Routes
 // ========================
-app.use('/api/lexicon', lexiconRoutes);
-app.use('/api/lexicon/admin', lexiconAdminRoutes);
+app.use('/api/auth', authModule.router);
+app.use('/api/lexicon', lexiconModule.router);
+app.use('/api/admin', lexiconModule.adminRouter);
 
 // ========================
 // 404 Handler

@@ -1,9 +1,12 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-// Support both DATABASE_URL and individual DB_ variables
-const pool = process.env.DATABASE_URL
-    ? new Pool({ connectionString: process.env.DATABASE_URL })
+// Support both DB_URL (Supabase cloud) and individual DB_ variables (local fallback)
+const pool = process.env.DB_URL
+    ? new Pool({
+        connectionString: process.env.DB_URL,
+        ssl: { rejectUnauthorized: false }, // Required for Supabase/cloud
+    })
     : new Pool({
         user: process.env.DB_USER,
         password: process.env.DB_PASSWORD,
@@ -13,7 +16,8 @@ const pool = process.env.DATABASE_URL
     });
 
 pool.on('connect', () => {
-    console.log('✅ Connected to PostgreSQL database');
+    const dbType = process.env.DB_URL ? '☁️  Supabase Cloud' : '🏠 Local PostgreSQL';
+    console.log(`✅ Connected to ${dbType} database`);
 });
 
 pool.on('error', (err) => {

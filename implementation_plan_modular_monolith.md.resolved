@@ -1,0 +1,59 @@
+# Modular Monolith Restructuring Plan
+
+This plan outlines the steps to reorganize the backend into a rigorous Modular Monolith architecture, ensuring high maintainability and clear boundaries between domains.
+
+## Proposed Changes
+
+### Backend Structure
+
+The goal is to move from a flat file structure inside modules to a more hierarchical and encapsulated one.
+
+#### [NEW] Module Encapsulation
+- Each module in `src/modules` will have an `index.js` that serves as its public interface.
+- Internal details (sub-models, specific logic) will be hidden from other modules.
+
+#### [RESTRUCTURE] Lexicon Module (`src/modules/lexicon`)
+The `lexicon` module is currently flat. I will sub-divide it into logical sub-units:
+- **Core Lexicon**: Main terms and definitions.
+- **Statutory**: Legal references.
+- **Daily Term**: Term of the day rotation.
+- **Bookmarks**: User-saved terms.
+
+Structure:
+```
+src/modules/lexicon/
+├── index.js              # Entry point
+├── lexicon.routes.js     # Master routes for the module
+├── lexicon.controller.js # Orchestration
+├── models/               # Data access layer
+│   ├── lexicon.model.js
+│   ├── statutory.model.js
+│   ├── dailyTerm.model.js
+│   └── bookmark.model.js
+├── services/             # Business logic (e.g., CSV/PDF import)
+│   ├── csvImporter.js
+│   └── pdfImporter.js
+└── jobs/                 # Background tasks
+    └── dailyTermScheduler.js
+```
+
+#### [RESTRUCTURE] Auth Module (`src/modules/auth`)
+- Standardize the structure to match the Lexicon module.
+- `src/modules/auth/auth.routes.js`
+- `src/modules/auth/auth.controller.js`
+- `src/modules/auth/auth.model.js`
+
+### Global Infrastructure
+- `src/config/`: Centralized configuration (DB, environment).
+- `src/middleware/`: Global middleware (authentication, logging).
+- [src/app.js](file:///c:/Users/Harini%20S/Downloads/dynamic-legal-lexicon%20ui/dynamic-legal-lexicon-2/backend/src/app.js): Clean initialization of modules.
+
+## Benefits
+- **Better Separation of Concerns**: Auth logic never leaks into Lexicon logic.
+- **Easier Testing**: Modules can be tested in isolation.
+- **Future Growth**: If a module needs to become a microservice, it's already bounded.
+
+## Verification Plan
+- Run existing tests (if any) to ensure no regressions.
+- Manually verify that all API endpoints still work as expected.
+- Check that the `Daily Term` scheduler still runs correctly after the move.

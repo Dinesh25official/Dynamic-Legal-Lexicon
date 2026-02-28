@@ -1,0 +1,33 @@
+.page-tools {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.page-tools .search-input {
+  max-width: 520px;
+}
+
+.admin-form {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-form button {
+  justify-self: start;
+  margin-top: 4px;
+}
+
+.term-list {
+  display: grid;
+  gap: 12px;
+}
+
+.term-list .actions-row {
+  margin-top: 2px;
+}
+
+.note {
+  color: var(--muted);
+  font-size: 0.96rem;
+}

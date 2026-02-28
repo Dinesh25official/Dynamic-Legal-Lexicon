@@ -1,0 +1,50 @@
+[
+  {
+    "id": 1,
+    "term": "Indictment",
+    "technical": "A formal written accusation initiating a criminal case, typically issued by a grand jury.",
+    "simple": "An official claim that someone committed a serious crime."
+  },
+  {
+    "id": 2,
+    "term": "Habeas Corpus",
+    "technical": "A legal writ requiring a detained person be brought before a court to test the legality of detention.",
+    "simple": "A right that protects people from being jailed without a valid reason."
+  },
+  {
+    "id": 3,
+    "term": "Tort",
+    "technical": "A civil wrong causing loss or harm, giving rise to legal liability outside contract law.",
+    "simple": "A harmful act that lets someone sue for compensation."
+  },
+  {
+    "id": 4,
+    "term": "Subpoena",
+    "technical": "A court order compelling a person to appear or produce evidence.",
+    "simple": "A legal order to show up in court or provide documents."
+  },
+  {
+    "id": 5,
+    "term": "Affidavit",
+    "technical": "A sworn written statement made under oath for use as evidence.",
+    "simple": "A signed statement promised to be true."
+  },
+  {
+    "id": 6,
+    "term": "Jurisdiction",
+    "technical": "The legal authority of a court to hear and decide a case.",
+    "simple": "The area or power where a court can make decisions."
+  },
+  {
+    "id": 1,
+    "term": "Indictment",
+    "technical": "Formal criminal charge",
+    "simple": "Official accusation"
+  },
+  {
+    "id": 2,
+    "term": "Affidavit",
+    "technical": "Written sworn statement",
+    "simple": "Written statement under oath"
+  }
+]

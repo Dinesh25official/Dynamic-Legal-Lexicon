@@ -1,0 +1,125 @@
+.home-container {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+.hero {
+  text-align: center;
+  margin: 40px auto;
+  max-width: 800px;
+}
+
+.hero h1 {
+  font-size: 3.5rem;
+  color: var(--primary);
+  margin-bottom: 16px;
+}
+
+.subtitle {
+  font-size: 1.25rem;
+  color: var(--text-muted);
+}
+
+.tod-card {
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.eyebrow {
+  color: var(--accent);
+  text-transform: uppercase;
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.1em;
+  margin-bottom: 12px;
+  display: block;
+}
+
+.tod-eyebrow {
+  text-transform: none;
+  font-family: 'Times New Roman', serif;
+  font-style: italic;
+  font-size: 1.1rem;
+}
+
+.tod-card h2 {
+  font-size: 2.5rem;
+  margin-bottom: 16px;
+}
+
+.tod-card p {
+  font-size: 1.1rem;
+  max-width: 600px;
+  margin-bottom: 32px;
+}
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 24px;
+}
+
+.feature-box {
+  background: white;
+  border: 1px solid var(--line);
+  padding: 32px;
+  border-radius: var(--radius-lg);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  color: var(--text-main);
+}
+
+.feature-box .icon {
+  color: var(--primary);
+  margin-bottom: 8px;
+  transition: color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.feature-box h3 {
+  font-size: 1.25rem;
+  color: var(--primary);
+  margin: 0;
+  transition: color 0.2s ease;
+}
+
+.feature-box p {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  margin: 0;
+  transition: color 0.2s ease;
+}
+
+.feature-box:hover {
+  background: var(--primary);
+  border-color: var(--primary);
+  transform: translateY(-8px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.feature-box:hover .icon,
+.feature-box:hover h3,
+.feature-box:hover p {
+  color: white;
+}
+
+@media (max-width: 768px) {
+  .hero h1 {
+    font-size: 2.25rem;
+  }
+
+  .tod-card {
+    padding: 24px;
+  }
+}

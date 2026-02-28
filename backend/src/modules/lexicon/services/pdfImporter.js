@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const pdfParse = require('pdf-parse');
 const Tesseract = require('tesseract.js');
-const db = require('../../config/db');
+const db = require('../../../config/db');
 
 // ============================================================
 // 1. TEXT EXTRACTION

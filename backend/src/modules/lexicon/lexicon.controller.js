@@ -1,4 +1,4 @@
-const lexiconModel = require('./lexicon.model');
+const lexiconModel = require('./models/lexicon.model');
 
 /**
  * GET /api/lexicon/search/term
@@ -20,6 +20,14 @@ const searchByTerm = async (req, res) => {
         const parsedLimit = Math.min(50, Math.max(1, parseInt(limit, 10) || 10));
 
         const results = await lexiconModel.searchByTerm(q, parsedPage, parsedLimit);
+
+        // Map results for easier consumption
+        results.terms = results.terms.map(t => ({
+            term: t["Legal Term"],
+            oxford_definition: t["Fixed (Oxford) Definition"],
+            simplified_definition: t["Simplified Definition"],
+            statutory: t.statutory || []
+        }));
 
         return res.status(200).json({
             success: true,
@@ -60,6 +68,14 @@ const searchByDescription = async (req, res) => {
 
         const results = await lexiconModel.searchByDescription(q, parsedPage, parsedLimit);
 
+        // Map results for easier consumption
+        results.terms = results.terms.map(t => ({
+            term: t["Legal Term"],
+            oxford_definition: t["Fixed (Oxford) Definition"],
+            simplified_definition: t["Simplified Definition"],
+            statutory: t.statutory || []
+        }));
+
         return res.status(200).json({
             success: true,
             message: results.terms.length > 0
@@ -78,29 +94,48 @@ const searchByDescription = async (req, res) => {
     }
 };
 
+const statutoryModel = require('./models/statutory.model');
+
 /**
  * GET /api/lexicon/term/:id
- * Get full term detail by ID with contexts, cases, and statutes.
+ * Get full term detail by Name (parameter still called id for route compatibility)
  */
 const getTermById = async (req, res) => {
     try {
-        const { id } = req.params;
+        const { id } = req.params; // This is the term name now
 
-        if (!id || isNaN(parseInt(id, 10))) {
+        if (!id) {
             return res.status(400).json({
                 success: false,
-                message: 'Invalid term ID. Please provide a valid numeric ID.',
+                message: 'Term name (id) is required.',
             });
         }
 
-        const term = await lexiconModel.getTermById(parseInt(id, 10));
+        const termRaw = await lexiconModel.getTermById(id);
 
-        if (!term) {
+        if (!termRaw) {
             return res.status(404).json({
                 success: false,
-                message: `Term with ID ${id} not found`,
+                message: `Term "${id}" not found`,
             });
         }
+
+        // Fetch statutory references using exact term name from DB
+        const termName = termRaw["Legal Term"];
+        let statutory = [];
+        try {
+            statutory = await statutoryModel.getStatutoryByTerm(termName);
+            console.log(`📖 Statutory for "${termName}": found ${statutory.length} references`);
+        } catch (statErr) {
+            console.error(`⚠️ Statutory fetch error for "${termName}":`, statErr.message);
+        }
+
+        const term = {
+            term: termName,
+            oxford_definition: termRaw["Fixed (Oxford) Definition"],
+            simplified_definition: termRaw["Simplified Definition"],
+            statutory: statutory || []
+        };
 
         return res.status(200).json({
             success: true,
@@ -123,14 +158,20 @@ const getTermById = async (req, res) => {
  */
 const getTermOfTheDay = async (req, res) => {
     try {
-        const term = await lexiconModel.getTermOfTheDay();
+        const termRaw = await lexiconModel.getTermOfTheDay();
 
-        if (!term) {
+        if (!termRaw) {
             return res.status(404).json({
                 success: false,
-                message: 'No terms available. Please seed the database with legal terms.',
+                message: 'No terms available.',
             });
         }
+
+        const term = {
+            term: termRaw["Legal Term"],
+            oxford_definition: termRaw["Fixed (Oxford) Definition"],
+            simplified_definition: termRaw["Simplified Definition"]
+        };
 
         return res.status(200).json({
             success: true,
